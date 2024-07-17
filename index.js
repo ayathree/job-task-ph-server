@@ -26,6 +26,7 @@ const client = new MongoClient(uri, {
 async function run() {
   try {
     const userCollection = client.db('tkashDB').collection('users');
+    const moneyCollection = client.db('tkashDB').collection('sendMoney');
 // jwt
     const authenticateToken = (req, res, next) => {
       const authHeader = req.headers.authorization;
@@ -113,6 +114,65 @@ async function run() {
         res.status(500).send({ message: 'Internal server error' });
       }
     });
+
+    // send money
+    app.post('/sendMoney', async (req, res) => {
+      const { senderAccount, receiverAccount, amount, pin } = req.body;
+      const token = req.headers.authorization.split(' ')[1]; // Assuming the token is sent in the Authorization header
+    
+      try {
+        // Verify the token and get the user's ID from it
+        const decoded = jwt.verify(token, process.env.JWT_SECRET);
+        const userId = decoded.id;
+    
+        // Find the user by ID
+        const user = await userCollection.findOne({ _id: new ObjectId(userId) });
+    
+        // If user is not found, send an error response
+        if (!user) {
+          return res.status(401).send({ message: 'Invalid credentials' });
+        }
+    
+        // Compare PIN
+        const isMatch = await bcrypt.compare(pin, user.pin);
+        if (!isMatch) {
+          return res.status(401).send({ message: 'Invalid credentials' });
+        }
+    
+        // Validate amount
+        if (amount < 50) {
+          return res.status(400).send({ message: 'Send at least 50' });
+        }
+    
+        // Increment amount if greater than 100 and prepare message
+        let finalAmount = amount;
+        let message = 'Send money successfully';
+        if (amount > 100) {
+          finalAmount += 5;
+          message += ' with an extra charge of 5 Taka for amounts over 100 Taka.';
+        }
+    
+        // Insert the send money details into the moneyCollection
+        const sendMoneyDetails = {
+          senderAccount,
+          receiverAccount,
+          amount: finalAmount,
+          timestamp: new Date(),
+        };
+        const result = await moneyCollection.insertOne(sendMoneyDetails);
+    
+        res.send({ ...result, message });
+      } catch (error) {
+        console.error(error);
+        res.status(500).send({ message: 'Internal Server Error' });
+      }
+    });
+    
+    
+    
+    // 
+
+
     
 
 
